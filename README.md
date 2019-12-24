@@ -38,6 +38,10 @@ https://github.com/amuguruza/NN-StochVol-Calibrations and the paper https://pape
 
 ![picture](images/mat_strike_grid.png)
 
+IMPORTANT:
+We left forward variance curve parametrization the same (8 splits). In the original article they used the following "break point" [0.1,0.3,0.6,0.9,1.2,1.5,1.8,2.0 ] while we are using [0.05, 0.1, 0.3, 0.6, 1, 1.4, 1.8, 2.5] so the grid is finer closer to zero.
+
+
 ## Loss curve comparison
 
 ### OLD
@@ -57,10 +61,13 @@ https://github.com/amuguruza/NN-StochVol-Calibrations and the paper https://pape
 ## Optimal params comparison
 
 ### OLD
+ksi correspond to these t in years: [0.1,0.3,0.6,0.9,1.2,1.5,1.8,2.0 ]
 
 ![picture](images/table_old.png)
 
 ### NEW
+
+ksi correspond to these t in years: [0.05, 0.1, 0.3, 0.6, 1, 1.4, 1.8, 2.5]
 
 ![picture](images/table_new.png)
 
