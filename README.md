@@ -58,11 +58,11 @@ https://github.com/amuguruza/NN-StochVol-Calibrations and the paper https://pape
 
 ### OLD
 
-![picture](images/table_old.png)
+![picture](images/table_old.html)
 
 ### NEW
 
-![picture](images/table_new.png)
+![picture](images/table_new.html)
 
 
 ## Fit for 2013-08-14
