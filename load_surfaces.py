@@ -1,6 +1,7 @@
 import gzip
 import os
 from logging import warning
+from paths import PATH_TO_OLD_DATA
 
 import numpy as np
 import pandas as pd
@@ -8,11 +9,18 @@ from joblib import Parallel, delayed
 from sklearn.neighbors import KNeighborsRegressor
 from tqdm import tqdm_notebook as tqdm
 
-from . import utils
-from .paths import *
+from nn_stochvol import utils
+from nn_stochvol.paths import *
 
 
-def load_new_vlt_surfaces():
+def load_vlt_surfaces(data_type):
+    assert data_type in ["new", "old"]
+    if data_type == "new":
+        return _load_new_vlt_surfaces()
+    else:
+        return _load_old_vlt_surfaces()
+
+def _load_new_vlt_surfaces():
     """
     Returns:
         new_params_nk, new_vol_nms, new_cols_k, new_maturities_ms, new_strikes_ms
@@ -50,46 +58,38 @@ def load_new_vlt_surfaces():
     params_cols_7 = forward_var_cols_4 + heston_cols_3
     params_n7 = np.concatenate([forward_var_params_n4, heston_params_n3], axis=1)[idx_n]
 
-
-    mat_str_grid_tk = pd.read_csv(PATH_TO_NEW_DATA/"maturity_strike_grid.csv", index_col="maturities")
-    mat_ms, strikes_ms = utils.get_mat_tk_strike_tk(mat_str_grid_tk)
+    mat_ms, strikes_ms = utils.get_mat_tk_strike_tk("new")
 
 
     return {"params_nk" : params_n7, "vols_nms"  : vols_nms, "params_cols_k" :  params_cols_7,
             "mat_ms" : mat_ms, "strikes_ms" : strikes_ms}
 
 
-def load_old_vlt_surfaces(fname):
+def _load_old_vlt_surfaces(fname="TrainrBergomiTermStructure.txt.gz"):
     """
     Returns:
         dict with keys old_params_nk, old_vol_nms, old_cols_k, old_maturities_ms, old_strikes_ms
     """
-    
-    path = PATH_TO_REPO.as_posix()
-
-    file = gzip.GzipFile(path + '/data/train_data/' + fname, "r")
+    file = gzip.GzipFile(PATH_TO_OLD_DATA/fname, "r")
     dat_nf = np.load(file)
-
-    # ehm, we should check whether they always have the params, I hope so
-    maturities = np.array([0.1,0.3,0.6,0.9,1.2,1.5,1.8,2.0 ])
-    strikes = np.array([0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5 ])
+    
+    mat_ms, strikes_ms = utils.get_mat_tk_strike_tk("old")
     
     params_nk = dat_nf[:,:-88]
-    assert params_nk.shape[1] in [4, 11], "I saw only these 2, check and fix this assert"
+    assert params_nk.shape[1] in [11], "Now using only this, check and fix this assert"
     
     vols_nms   = dat_nf[:,-88:]
-    vols_nms   = vols_nms.reshape(vols_nms.shape[0], maturities.size, strikes.size)
+    vols_nms   = vols_nms.reshape(vols_nms.shape[0], mat_ms.shape[0], mat_ms.shape[1])
     assert vols_nms.shape[1:] == (8, 11)
 
-    mat_ms, strikes_ms = np.meshgrid(maturities, strikes)
-    
+
     cols_k = [f"ksi_{i}" for i in range(8)] + ["eta", "rho", "H"]
 
     return {"params_nk" : params_nk, "vols_nms"  : vols_nms, "params_cols_k" :  cols_k,
-            "mat_ms" : mat_ms.T, "strikes_ms" : strikes_ms.T}
+            "mat_ms" : mat_ms, "strikes_ms" : strikes_ms}
 
 
-def get_vlt_surf_ms_from_real_data(df_or_date_yyyymmdd=20130814):
+def get_vlt_surf_ms_from_real_data(df_or_date_yyyymmdd=20130814, *, data_type):
     """
     @param df_or_date_yyyymmdd
         either a dataframe with Bid, Ask, Strike, Fwd and Texp fields
@@ -98,13 +98,14 @@ def get_vlt_surf_ms_from_real_data(df_or_date_yyyymmdd=20130814):
     return
         vlt_surf_ms, df, mat_ms, strikes_ms
     """
+    assert data_type in ["new", "old"]
+
     if isinstance(df_or_date_yyyymmdd, int):
-        df = pd.read_csv(PATH_TO_REPO/f"data/real_vol_surfaces/spxVols{df_or_date_yyyymmdd}.csv")
+        df = pd.read_csv(PATH_TO_REAL_DATA/f"spxVols{df_or_date_yyyymmdd}.csv")
     else:
         df = df_or_date_yyyymmdd
         assert isinstance(df, pd.DataFrame)
         
-
     mid_t = (df.Bid + df.Ask).values / 2
     valid_t = np.isfinite(mid_t)
 
@@ -118,12 +119,10 @@ def get_vlt_surf_ms_from_real_data(df_or_date_yyyymmdd=20130814):
         return strike_t * 4, mat_t # they have same std then
     
     strike_t, mat_t = transform_strike_mat(strike_t, mat_t)
-    knn = KNeighborsRegressor(n_neighbors=10, weights='distance')
+    knn = KNeighborsRegressor(n_neighbors=5, weights='distance')
     knn.fit(np.stack([strike_t, mat_t]).T, mid_t,)
 
-
-    mat_str_grid_tk = pd.read_csv(PATH_TO_NEW_DATA/"maturity_strike_grid.csv", index_col="maturities")
-    mat_ms, strikes_ms = utils.get_mat_tk_strike_tk(mat_str_grid_tk)
+    mat_ms, strikes_ms = utils.get_mat_tk_strike_tk(data_type)
 
     strike_T, mat_T = transform_strike_mat(strikes_ms.ravel(), mat_ms.ravel())
     vlt_surf_ms = knn.predict(np.stack([strike_T, mat_T]).T).reshape(strikes_ms.shape)

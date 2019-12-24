@@ -5,33 +5,31 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import pandas as pd
 
-from .utils import to_np
+from nn_stochvol.utils import to_np
 
 
-def plot_params(optimal_params, clip_args=(0.1, 0.5), label=None, axis=None):
+def plot_params(optimal_params, data_type, label=None, axis=None):
     """
     @param label
         will be used as an index for dataframe. E.g. pass yyyymmdd
     """
-    if optimal_params.size == 11:
-        data_type = "old"
-    elif optimal_params.size == 7:
-        data_type = "new"
-    else:
-        raise NotImplementedError
+    assert data_type in ["new", "old"]
 
+    if axis is None:
+        _, axis = plt.subplots(1, 1)
+    axis.set_title(f"Forward curve. {label}. {data_type}")
 
-    if data_type == "old":
-        if axis is None:
-            _, axis = plt.subplots(1, 1)
-        axis.set_title("Forward curve")
-        axis.plot(optimal_params[:8], label="optimal params")
-        axis.legend()
-    else:
-        axis = plot_forward_var_curve(optimal_params[:4],
-                clip_args=clip_args, label="optimal params", axis=axis)
-        axis.set_title("Forward curve")
-        axis.legend()
+    maturities = [0] + (
+        [0.1,0.3,0.6,0.9,1.2,1.5,1.8,2.0 ]
+        if data_type == "old" else 
+        [0.05, 0.1, 0.3, 0.6, 1, 1.4, 1.8, 2.5]
+    )
+    axis.plot(maturities, [0] + list(optimal_params[:8]), "o-", drawstyle="steps-pre")
+    axis.axhline(0., color="k")
+    axis.set_xlabel("time in years")
+    axis.set_xlim(0, 2.5)
+    
+    axis.legend()
 
 
     df = pd.DataFrame(data=optimal_params[-3:].reshape(1, -1), columns=['eta', 'rho', 'H'], index=[label])

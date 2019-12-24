@@ -10,7 +10,8 @@ from torch import optim
 from torch.utils import data
 from tqdm import tqdm_notebook as tqdm
 
-from .utils import to_np
+from nn_stochvol.utils import to_np
+from nn_stochvol import lbfgs_wrapper
 
 
 def get_train_test_dataset_and_loader(normalized_data, batch_size=64):
@@ -84,9 +85,11 @@ class Learner:
             clear_output(True)
             self.show_loss(epoch, show_all=False,**kwargs)
 
-        self.show_loss(num_epochs, show_all=True)
+        fig = self.show_loss(num_epochs, show_all=True)
+        return fig
 
-    def show_loss(self, epoch, show_all=True, filename=''):
+
+    def show_loss(self, epoch, show_all=True):
         fig, axis = plt.subplots(1, 1)
         axis.set_title(epoch)
         num_epochs = len(self.train_loss_list)
@@ -98,9 +101,9 @@ class Learner:
         axis.set_yscale("log" if show_all else "linear")
         axis.grid()
         axis.legend()
-        if filename!='':
-            plt.savefig(filename)
         plt.show()
+
+        return fig
 
     def predict(self, dataset, vol_scaler):
         """
@@ -157,22 +160,20 @@ class ParamsOptimizer:
         pred_vlt_surf_ms = self.vol_scaler.inverse_transform(pred_vlt_surf).reshape(8, 11)
         return pred_vlt_surf_ms
 
-    def optimize(self, target_vlt_surf, initial_params=None, num_iterations=21, real_params=None, bounds=None,
-                OptimCls=optim.LBFGS, lr=1., scale_vlt_surf=False,target_folder=''):
+    def optimize(self, target_vlt_surf, bounds,
+            initial_params=None, num_iterations=21,
+            scale_vlt_surf=True, show_plot=False):
+        
+        assert target_vlt_surf.size == 88, "make sure you pass the correct target_vlt surface"
+        target_vlt_surf = target_vlt_surf.ravel()
         self._move_target_vlt_to_torch(target_vlt_surf, scale_vlt_surf)
-
-        if OptimCls is optim.LBFGS:
-            assert num_iterations < 20, "for LBFGS you need at most 5 (most probably 1 or 2)"
 
         if initial_params is None:
             initial_params = torch.zeros(self.model[0].in_features, dtype=float)
 
         input_params = nn.Parameter(initial_params.double().clone(), requires_grad=True)
 
-        try:
-            optimizer = OptimCls([input_params], lr=lr)
-        except TypeError:
-            optimizer = OptimCls([input_params], bounds=bounds)
+        optimizer = lbfgs_wrapper.LBFGSScipy([input_params], bounds=bounds)
 
 
         self.surface_loss_list = []
@@ -192,12 +193,9 @@ class ParamsOptimizer:
                 pred_vlt_surf = self.model(input_params)
                 loss = self.criterion(pred_vlt_surf, self.target_vlt_surf)
                 self.surface_loss_list.append(loss.item())
-                if real_params is not None:
-                    self.params_loss_list.append(((input_params - real_params)**2).mean())
         
-        self.show_loss(self.surface_loss_list, "surface mse loss by iteration")
-        if real_params is not None:
-            self.show_loss(self.params_loss_list, "params mse loss by iteration")
+        if show_plot:
+            self.show_loss(self.surface_loss_list, "surface mse loss by iteration")
             
         final_params = to_np(input_params)
         pred_vlt_surf = self._get_pred_vlt_surf_ms(final_params)

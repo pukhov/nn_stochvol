@@ -126,7 +126,7 @@ class LBFGSScipy(Optimizer):
 
         def callback(flat_params):
             self._n_iter += 1
-            print('Iter %i Loss %.5f' % (self._n_iter, self._last_loss.item()))
+            # print('Iter %i Loss %.5f' % (self._n_iter, self._last_loss.item()))
 
         initial_params = self._gather_flat_params()
 
